@@ -4,12 +4,8 @@ class Coin
   @@id = 1
 
   BAD_COIN_STATES = {
-    FINAL_LOW: 'FINAL_LOW',
-    FINAL_HEAVY: 'FINAL_HEAVY',
-    LOW1: 'LOW1',
-    LOW2: 'LOW2',
-    HIGH1: 'HIGH1',
-    HIGH2: 'HIGH2',
+    LOW: 'LOW',
+    HIGH: 'HIGH',
   }
 
   COIN_STATES = {
@@ -54,5 +50,17 @@ class Coin
 
   def mark_correct
     self.state = COIN_STATES.fetch(:CORRECT)
+  end
+
+  def mark_low
+    self.state = COIN_STATES.fetch(:LOW)
+  end
+
+  def mark_high
+    self.state = COIN_STATES.fetch(:HIGH)
+  end
+
+  def make_light
+    self.weight = COIN_WEIGHTS.fetch(:LIGHT)
   end
 end

@@ -3,6 +3,8 @@ require 'combinatorics'
 require 'json'
 require 'ostruct'
 require_relative './coin'
+require_relative './scale'
+require_relative './constants'
 
 # https://stackoverflow.com/a/15737305
 class Array
@@ -31,7 +33,7 @@ class Array
   end
 end
 
-class PuzzleSolver
+class PuzzleStateBuilder
   NUM_COINS = 13
 
   attr_accessor :global_state
@@ -41,29 +43,89 @@ class PuzzleSolver
   end
 
   def solve
-    13.times.map do |index|
-      states = [:LOW1] * (index + 2)
+    build_state_for_just_low(4)
+    clone_low_state
+    build_state_for_low_high_combo
+  end
+
+  def clone_low_state
+    high_state = {}
+
+    global_state.each do |state, perms|
+      new_state = state.gsub('LOW', 'HIGH')
+
+      high_state[new_state] = perms.map do |perm|
+        {
+          side1: perm[:side1].map do |state|
+            state == 'LOW' ? 'HIGH' : state
+          end,
+          side2: perm[:side2].map do |state|
+            state == 'LOW' ? 'HIGH' : state
+          end,
+          max_step: perm[:max_step]
+        }
+      end
+    end
+
+    global_state.merge!(high_state)
+  end
+
+  def build_state_for_low_high_combo
+    num_coins = 4
+    num_lows_and_highs = []
+
+    (1..num_coins).each do |num_low|
+      (1..num_coins).each do |num_high|
+        next if num_low + num_high > Constants::NUM_COINS
+
+        num_lows_and_highs << [num_low, num_high]
+      end
+    end
+
+    num_lows_and_highs.each do |num_low_and_high|
+      low, high = num_low_and_high
+      ENV['BYEBUG'] = 'true' if low == 4 && high == 4
+      calculate_ideal_step([:LOW] * low + [:HIGH] * high)
+    end
+  end
+
+  def build_state_for_just_low(num_coins)
+    num_coins.times.map do |index|
+      states = [:LOW] * (index + 2)
       calculate_ideal_step(states)
     end
-    byebug
   end
 
 
   def calculate_ideal_step(bad_coin_states)
     bad_coins = bad_coin_states.map { |state| Coin.new(state) }
 
-    # if bad_coin_states.length == 1
-    #   global_state[state_name(bad_coins)] = { step: 0 }
-    #   return
-    # end
-
     scale_schemas = compute_scale_schemas(bad_coin_states)
 
-    # byebug if bad_coin_states.length == 8
+    fingerprint = {}
+
+    final_scale_schemas = []
 
     scale_schemas.each do |scale_schema|
+      side1 = scale_schema[0].sort.join
+      side2 = scale_schema[1].sort.join
+
+      id1 = "#{side1}:#{side2}"
+      id2 = "#{side2}:#{side1}"
+
+      next if fingerprint[id1] || fingerprint[id2]
+
+      fingerprint[id1] = true
+      fingerprint[id2] = true
+
+      final_scale_schemas << scale_schema
+    end
+
+    final_scale_schemas.each do |scale_schema|
+
       perms = compute_perms(bad_coins, scale_schema)
       max_step = test_perm(bad_coins, perms)
+      # byebug if ENV['BYEBUG'] == 'true' && scale_schema[0].sort == ['HIGH', 'HIGH', 'HIGH', 'LOW', 'LOW'] && scale_schema[1] == ['CORRECT','CORRECT','CORRECT','CORRECT','CORRECT']
 
       global_state[state_name(bad_coins)] ||= []
 
@@ -89,6 +151,7 @@ class PuzzleSolver
       perms.values.comprehension.to_a.each do |schemas|
         side1_coins = []
         side2_coins = []
+
         dup_bad_coins = bad_coins.map(&:dup)
         all_coins = dup_bad_coins + good_coins
 
@@ -100,15 +163,19 @@ class PuzzleSolver
         coin_delta = side1_coins.length - side2_coins.length
         side2_coins += good_coins.slice(0, coin_delta)
 
-        # raise if side2_coins.length != side1_coins.length
-        byebug if side2_coins.length != side1_coins.length
+        raise if side2_coins.length != side1_coins.length
 
-        weigh(all_coins, side1_coins, side2_coins)
+        Scale.weigh_and_update(all_coins, side1_coins, side2_coins)
 
-        if dup_bad_coins.select(&:correct?).length == dup_bad_coins.length - 1
+        if dup_bad_coins.select(&:not_correct?).length == 1
           max_step = [max_step, 1].max
         else
+          begin
           max_step = [max_step, find_max_step(bad_coins, dup_bad_coins, all_coins) + 1].max
+          rescue
+            raise
+            byebug
+          end
         end
       end
 
@@ -138,52 +205,6 @@ class PuzzleSolver
     end.join(':')
   end
 
-  def weigh(all_coins, side1_coins, side2_coins)
-    weight_delta = side1_coins.sum(&:weight) - side2_coins.sum(&:weight)
-    missing_coins = all_coins.select { |coin| !side1_coins.map(&:id).include?(coin.id) && !side2_coins.map(&:id).include?(coin.id) }
-
-    if weight_delta == 0
-      side1_coins.each(&:mark_correct)
-      side2_coins.each(&:mark_correct)
-      return
-    end
-
-    # if side2_coins.all?(&:correct?)
-    #   side1_coins.each(&:upgrade)
-    # end
-
-    uniq_states = all_coins.select(&:not_correct?).map(&:state).uniq
-
-    if uniq_states.count == 1 && uniq_states[0] =~ /1/
-      if uniq_states[0] =~ /LOW/
-        missing_coins.each(&:mark_correct)
-
-        if weight_delta > 0
-          side1_coins.each(&:mark_correct)
-        else
-          side2_coins.each(&:mark_correct)
-        end
-      else
-      end
-    end
-
-    # If the scale was incorrect, and there is only one possible coin on the scale, mark it as final.
-    if side1_coins.all?(&:correct?) && side2_coins.select(&:not_correct?).length == 1
-      side2_coins.find(&:not_correct?).state = Coin::COIN_STATES.fetch(:FINAL_LOW)
-    end
-
-    # If the scale was incorrect, and there is only one possible coin on the scale, mark it as final.
-    if side2_coins.all?(&:correct?) && side1_coins.select(&:not_correct?).length == 1
-      side1_coins.find(&:not_correct?).state = Coin::COIN_STATES.fetch(:FINAL_LOW)
-    end
-
-    if all_coins.select(&:correct?).length == all_coins.length - 1
-      all_coins.find(&:not_correct?).state = Coin::COIN_STATES.fetch(:FINAL_LOW)
-    end
-
-    raise if all_coins.find { |x| x.weight != 1 }.correct?
-  end
-
   def compute_perms(bad_coins, scale_schema)
     side1_state_counts = scale_schema[0].each_with_object({}) do |state, memo|
       memo[state] ||= 0
@@ -197,27 +218,43 @@ class PuzzleSolver
 
     all_state_perms = {}
 
-    side1_state_counts.each do |side1_state, side1_count|
+    states = scale_schema.flatten.uniq
+
+    states.each do |state|
+      next if state == 'CORRECT'
+
       state_perms = []
 
       matching_bad_coins = bad_coins.select do |bad_coin|
-        bad_coin.state == side1_state
+        bad_coin.state == state
       end
 
-      matching_bad_coins.map(&:id).choose(side1_count).each do |side1_coin_perms|
-        side2_state_count = side2_state_counts[side1_state]
-        other_ids = matching_bad_coins.map(&:id) - side1_coin_perms.to_a
+      side1_count = side1_state_counts[state]
+      side2_count = side2_state_counts[state]
 
-        if side2_state_count.nil?
-          state_perms.push(side1: side1_coin_perms.to_a, side2: [], state: side1_state)
-        else
-          other_ids.choose(side2_state_count).each do |side2_coin_perms|
-            state_perms.push(side1: side1_coin_perms.to_a, side2: side2_coin_perms.to_a, state: side1_state)
+      if side1_count && side2_count
+        matching_bad_coins.map(&:id).choose(side1_count).each do |side1_coin_perms|
+          other_ids = matching_bad_coins.map(&:id) - side1_coin_perms.to_a
+
+          other_ids.choose(side2_count).each do |side2_coin_perms|
+            state_perms.push(side1: side1_coin_perms.to_a, side2: side2_coin_perms.to_a)
           end
         end
+      elsif side1_count
+        matching_bad_coins.map(&:id).choose(side1_count).each do |side1_coin_perms|
+          state_perms.push(side1: side1_coin_perms.to_a, side2: [])
+        end
+      elsif side2_count
+        matching_bad_coins.map(&:id).choose(side2_count).each do |side2_coin_perms|
+          state_perms.push(side1: [], side2: side2_coin_perms.to_a)
+        end
+      else
+        byebug
+        raise
+        #
       end
 
-      all_state_perms[side1_state] = state_perms
+      all_state_perms[state] = state_perms
     end
 
     all_state_perms
@@ -253,7 +290,7 @@ class PuzzleSolver
 
         # If there are more states in this perm than expected, skip.
         should_skip = expected_count_states.any? do |state, expected_count_for_state|
-          current_count_states[state] > expected_count_for_state
+          current_count_states[state] && current_count_states[state] > expected_count_for_state
         end
 
         next if should_skip
@@ -268,6 +305,3 @@ class PuzzleSolver
     schemas
   end
 end
-
-puts PuzzleSolver.new.solve
-# PuzzleSolver.new.test2
