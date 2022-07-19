@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'bundler/setup'
+require_relative '../src/puzzle_state_builder'
+
+puzzle_state_builder = PuzzleStateBuilder.new
+puzzle_state_builder.build
+puzzle_state_builder.save_to_file
