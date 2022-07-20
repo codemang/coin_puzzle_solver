@@ -4,13 +4,13 @@ class Coin
   @@id = 1
 
   BAD_COIN_STATES = {
-    LOW: 'LOW',
-    HIGH: 'HIGH',
+    LOW: :LOW,
+    HIGH: :HIGH,
   }
 
   COIN_STATES = {
-    UNKNOWN: 'UNKNOWN',
-    CORRECT: 'CORRECT',
+    UNKNOWN: :UNKNOWN,
+    CORRECT: :CORRECT,
   }.merge(BAD_COIN_STATES)
 
   COIN_WEIGHTS = {
@@ -38,14 +38,12 @@ class Coin
     state != COIN_STATES.fetch(:CORRECT)
   end
 
-  def upgrade
-    if state == BAD_COIN_STATES.fetch(:LOW1)
-      state = BAD_COIN_STATES.fetch(:LOW2)
-    elsif state == BAD_COIN_STATES.fetch(:HIGH1)
-      state = BAD_COIN_STATES.fetch(:HIGH2)
-    else
-      raise RuntimeError
-    end
+  def low?
+    state == COIN_STATES.fetch(:LOW)
+  end
+
+  def not_normal_weight?
+    weight != COIN_WEIGHTS.fetch(:NORMAL)
   end
 
   def mark_correct
@@ -76,11 +74,7 @@ class Coin
     self.weight = COIN_WEIGHTS.fetch(:NORMAL)
   end
 
-  def low?
-    state == COIN_STATES.fetch(:LOW)
-  end
-
   def has_state(state_to_test)
-    state == state_to_test.to_s
+    state == state_to_test
   end
 end

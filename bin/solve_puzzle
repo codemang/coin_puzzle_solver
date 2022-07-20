@@ -2,6 +2,15 @@
 
 require 'rubygems'
 require 'bundler/setup'
+require 'optparse'
 require_relative '../src/puzzle_solver'
 
-PuzzleSolver.new.solve
+options = {}
+
+OptionParser.new do |opt|
+  opt.on('-r', '--read-puzzle-state', 'Add this flag if you want the solver to read the puzzle states from a file. If so, make sure you first run `bin/save_puzzle_states`.') do
+    options[:should_read_from_file] = true
+  end
+end.parse!
+
+PuzzleSolver.new(should_read_from_file: options[:should_read_from_file]).solve
