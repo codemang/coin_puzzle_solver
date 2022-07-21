@@ -27,7 +27,7 @@ class PuzzleStateBuilder
   def build
     Logger.log("Starting process to calculate all possible puzzle states and their distance from the final solution.")
     create_puzzle_states_for_low_coins
-    clone_low_puzzle_states_to_high
+    create_puzzle_states_for_high_coins
     create_puzzle_states_for_low_high_coin_combos
     create_puzzle_state_for_unknown_coins
   end
@@ -66,7 +66,7 @@ class PuzzleStateBuilder
     end
   end
 
-  def clone_low_puzzle_states_to_high
+  def create_puzzle_states_for_high_coins
     Logger.log("-> Calculating all possible puzzle states when there are only coins we think might be heavy.")
 
     (2..NUM_INCORRECT_COINS_TO_CONSIDER).each do |num_coins|
